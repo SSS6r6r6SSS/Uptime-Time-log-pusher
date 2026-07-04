@@ -1,0 +1,6 @@
+{
+  "name": "Uptime logpush",
+  "description": "实时获取、本地展示并通知 webhook.log 新产生的日志行",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "955292673290",
+    "project_id": "uptime-logpush",
+    "storage_bucket": "uptime-logpush.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:955292673290:android:b98aea33ccfa42086a86f3",
+        "android_client_info": {
+          "package_name": "com.xiaobu.uptime"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD-XV1yZXP7K7eDy_mTIhk-vRHyoNomSvg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
