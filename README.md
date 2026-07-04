@@ -1,4 +1,4 @@
-Uptime Logpush
+Uptime Logpush APP
 -------------------------------
 
 Introduction
