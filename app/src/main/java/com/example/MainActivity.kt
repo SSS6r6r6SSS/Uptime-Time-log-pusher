@@ -980,7 +980,7 @@ fun LogMonitorScreen(
                                     10000L -> "标准平衡 (10 秒)"
                                     30000L -> "均衡省电 (30 秒)"
                                     60000L -> "超级省电 (1 分钟)"
-                                    else -> "${pollingInterval / 1000}s"
+                                    else -> "自定义 (${pollingInterval / 1000} 秒)"
                                 }
 
                                 Box {
@@ -1006,7 +1006,7 @@ fun LogMonitorScreen(
                                                 fontFamily = FontFamily.Monospace
                                             )
                                             Text(
-                                                text = "修改 ▾",
+                                                text = "选择预设 ▾",
                                                 color = ElegantTextGray,
                                                 fontSize = 11.sp
                                             )
@@ -1042,6 +1042,76 @@ fun LogMonitorScreen(
                                                 }
                                             )
                                         }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(2.dp))
+
+                                // Custom custom interval text input field
+                                var customSecondsText by remember(pollingInterval) { 
+                                    mutableStateOf((pollingInterval / 1000).toString()) 
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = customSecondsText,
+                                        onValueChange = { newValue ->
+                                            if (newValue.all { it.isDigit() }) {
+                                                customSecondsText = newValue
+                                            }
+                                        },
+                                        label = { Text("自定义时间 (秒)", fontSize = 11.sp, color = ElegantTextGray) },
+                                        textStyle = TextStyle(
+                                            color = ElegantPrimary,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 12.sp
+                                        ),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = ElegantPrimary,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.05f),
+                                            focusedContainerColor = ElegantTerminalBg,
+                                            unfocusedContainerColor = ElegantTerminalBg,
+                                            focusedTextColor = ElegantTextLight,
+                                            unfocusedTextColor = ElegantTextLight
+                                        ),
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(56.dp)
+                                            .testTag("custom_interval_input")
+                                    )
+
+                                    val isCustomSaveEnabled = customSecondsText.toLongOrNull()?.let { it * 1000L != pollingInterval && it > 0 } ?: false
+
+                                    Button(
+                                        onClick = {
+                                            val sec = customSecondsText.toLongOrNull()
+                                            if (sec != null && sec > 0) {
+                                                viewModel.setPollingInterval(sec * 1000L)
+                                                Toast.makeText(context, "轮询间隔已自定义为 $sec 秒", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Toast.makeText(context, "请输入有效的秒数", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        enabled = isCustomSaveEnabled,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = ElegantPrimary,
+                                            disabledContainerColor = ElegantButtonGray
+                                        ),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.height(56.dp)
+                                    ) {
+                                        Text(
+                                            text = "应用",
+                                            color = if (isCustomSaveEnabled) ElegantOnPrimary else ElegantTextGray,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     }
                                 }
                             }
