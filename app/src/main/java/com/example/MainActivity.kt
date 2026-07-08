@@ -53,6 +53,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
@@ -189,7 +190,7 @@ fun LogMonitorScreen(
         }
     }
 
-    var selectedTab by remember { mutableStateOf(0) } // 0: Logs, 1: History & Stats, 2: Config
+    var selectedTab by remember { mutableStateOf(0) } // 0: Logs, 1: Category, 2: History & Stats, 3: Config
 
     // Handle system notification permission on Android 13+ (API 33+)
     var hasNotificationPermission by remember {
@@ -296,7 +297,7 @@ fun LogMonitorScreen(
                 // Header Settings Button: Toggles settings tab directly
                 IconButton(
                     onClick = { 
-                        selectedTab = if (selectedTab == 2) 0 else 2
+                        selectedTab = if (selectedTab == 3) 0 else 3
                     },
                     modifier = Modifier
                         .size(44.dp)
@@ -717,6 +718,312 @@ fun LogMonitorScreen(
                 }
 
                 1 -> {
+                    // Category Filter View ("分类查询")
+                    var selectedPrimaryCategory by remember { mutableStateOf("全部") }
+                    var selectedMonitorName by remember { mutableStateOf<String?>(null) }
+                    var categorySearchQuery by remember { mutableStateOf("") }
+
+                    val uniqueMonitors = remember(logs) {
+                        logs.mapNotNull { log ->
+                            val kuma = KumaPayload.parse(log.content)
+                            if (kuma.isKuma) kuma.monitorName else null
+                        }.distinct().filter { it.isNotBlank() }
+                    }
+
+                    val categoryFilteredLogs = remember(logs, selectedPrimaryCategory, selectedMonitorName, categorySearchQuery) {
+                        logs.filter { log ->
+                            val kuma = KumaPayload.parse(log.content)
+                            
+                            // 1. Primary category filter
+                            val matchesPrimary = when (selectedPrimaryCategory) {
+                                "全部" -> true
+                                "Kuma监控" -> kuma.isKuma
+                                "正常状态" -> (kuma.isKuma && kuma.status == 1) || (!kuma.isKuma && (log.content.contains("UP", ignoreCase = true) || log.content.contains("success", ignoreCase = true) || log.content.contains("OK", ignoreCase = true)))
+                                "异常告警" -> (kuma.isKuma && kuma.status == 0) || (!kuma.isKuma && (log.content.contains("DOWN", ignoreCase = true) || log.content.contains("FAIL", ignoreCase = true) || log.content.contains("ERROR", ignoreCase = true)))
+                                "普通日志" -> !kuma.isKuma
+                                else -> true
+                            }
+                            
+                            if (!matchesPrimary) return@filter false
+                            
+                            // 2. Specific Monitor filter (if selected)
+                            val matchesMonitor = if (selectedMonitorName != null) {
+                                kuma.isKuma && kuma.monitorName == selectedMonitorName
+                            } else {
+                                true
+                            }
+                            
+                            if (!matchesMonitor) return@filter false
+                            
+                            // 3. Category search query filter
+                            val matchesSearch = if (categorySearchQuery.isNotBlank()) {
+                                log.content.contains(categorySearchQuery, ignoreCase = true)
+                            } else {
+                                true
+                            }
+                            
+                            matchesSearch
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = ElegantSurface),
+                        shape = RoundedCornerShape(32.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = "分类检索中心",
+                                color = ElegantTextLight,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+
+                            // 1. Primary Category Selector
+                            Text(
+                                text = "按事件类型分类:",
+                                color = ElegantTextGray,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            
+                            androidx.compose.foundation.layout.FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                val primaryCategories = listOf("全部", "Kuma监控", "正常状态", "异常告警", "普通日志")
+                                primaryCategories.forEach { category ->
+                                    val isSelected = selectedPrimaryCategory == category
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(if (isSelected) ElegantPrimary else ElegantTerminalBg)
+                                            .border(1.dp, if (isSelected) ElegantPrimary else Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                                            .clickable { 
+                                                selectedPrimaryCategory = category 
+                                                if (category != "全部" && category != "Kuma监控" && category != "正常状态" && category != "异常告警") {
+                                                    selectedMonitorName = null
+                                                }
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = category,
+                                            color = if (isSelected) ElegantOnPrimary else ElegantTextLight,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+
+                            // 2. Monitor Specific Filter Row
+                            if (uniqueMonitors.isNotEmpty() && selectedPrimaryCategory != "普通日志") {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "按特定监控对象过滤:",
+                                    color = ElegantTextGray,
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                
+                                androidx.compose.foundation.lazy.LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    item {
+                                        val isAllSelected = selectedMonitorName == null
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(if (isAllSelected) ElegantPrimary.copy(alpha = 0.2f) else ElegantTerminalBg)
+                                                .border(1.dp, if (isAllSelected) ElegantPrimary else Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                                                .clickable { selectedMonitorName = null }
+                                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(
+                                                text = "全部对象",
+                                                color = if (isAllSelected) ElegantPrimary else ElegantTextLight,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                    
+                                    items(uniqueMonitors) { monitor ->
+                                        val isSelected = selectedMonitorName == monitor
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(if (isSelected) ElegantPrimary.copy(alpha = 0.2f) else ElegantTerminalBg)
+                                                .border(1.dp, if (isSelected) ElegantPrimary else Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                                                .clickable { selectedMonitorName = monitor }
+                                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(
+                                                text = monitor,
+                                                color = if (isSelected) ElegantPrimary else ElegantTextLight,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 3. Keyword query input
+                            OutlinedTextField(
+                                value = categorySearchQuery,
+                                onValueChange = { categorySearchQuery = it },
+                                placeholder = { 
+                                    Text(
+                                        "输入检索关键字...", 
+                                        fontSize = 11.sp, 
+                                        color = ElegantTextGray, 
+                                        fontFamily = FontFamily.Monospace
+                                    ) 
+                                },
+                                singleLine = true,
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = "Search",
+                                        tint = ElegantTextGray,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (categorySearchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { categorySearchQuery = "" }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Clear,
+                                                contentDescription = "Clear",
+                                                tint = ElegantTextGray,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    }
+                                },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = ElegantPrimary.copy(alpha = 0.5f),
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.05f),
+                                    focusedTextColor = ElegantTextLight,
+                                    unfocusedTextColor = ElegantTextLight,
+                                    focusedContainerColor = ElegantTerminalBg,
+                                    unfocusedContainerColor = ElegantTerminalBg
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                textStyle = TextStyle(fontSize = 11.sp, fontFamily = FontFamily.Monospace),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                            )
+
+                            // 4. Matches summary text
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "共检索到 ${categoryFilteredLogs.size} 条匹配的日志",
+                                    color = ElegantTextGray,
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                if (selectedPrimaryCategory != "全部" || selectedMonitorName != null || categorySearchQuery.isNotEmpty()) {
+                                    Text(
+                                        text = "重置筛选",
+                                        color = ElegantPrimary,
+                                        fontSize = 10.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        modifier = Modifier
+                                            .clickable {
+                                                selectedPrimaryCategory = "全部"
+                                                selectedMonitorName = null
+                                                categorySearchQuery = ""
+                                            }
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            // 5. Categorized results List
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(ElegantTerminalBg)
+                            ) {
+                                if (categoryFilteredLogs.isEmpty()) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(16.dp),
+                                        verticalArrangement = Arrangement.Center,
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Terminal,
+                                            contentDescription = "Search Empty",
+                                            tint = ElegantTextGray,
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .alpha(0.5f)
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = "无匹配的检索记录",
+                                            color = ElegantTextLight,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "试着调整分类筛选或检索关键字",
+                                            color = ElegantTextGray,
+                                            fontSize = 10.sp,
+                                            textAlign = TextAlign.Center,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        items(categoryFilteredLogs, key = { "category_" + it.id }) { logItem ->
+                                            LogLineItem(
+                                                log = logItem,
+                                                onLineClick = {
+                                                    clipboardManager.setText(AnnotatedString(logItem.content))
+                                                    Toast.makeText(context, "Copied log line", Toast.LENGTH_SHORT).show()
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                2 -> {
                     // History & Stats View
                     Card(
                         modifier = Modifier
@@ -800,7 +1107,7 @@ fun LogMonitorScreen(
                     }
                 }
 
-                2 -> {
+                3 -> {
                     // Config settings View
                     Card(
                         modifier = Modifier
@@ -1206,20 +1513,28 @@ fun LogMonitorScreen(
                 onClick = { selectedTab = 0 }
             )
 
+            // Category tab
+            BottomNavItem(
+                icon = Icons.Default.Category,
+                label = "Category",
+                isSelected = selectedTab == 1,
+                onClick = { selectedTab = 1 }
+            )
+
             // History tab
             BottomNavItem(
                 icon = Icons.Default.History,
                 label = "History",
-                isSelected = selectedTab == 1,
-                onClick = { selectedTab = 1 }
+                isSelected = selectedTab == 2,
+                onClick = { selectedTab = 2 }
             )
 
             // Config tab
             BottomNavItem(
                 icon = Icons.Default.Settings,
                 label = "Config",
-                isSelected = selectedTab == 2,
-                onClick = { selectedTab = 2 }
+                isSelected = selectedTab == 3,
+                onClick = { selectedTab = 3 }
             )
         }
     }
@@ -1403,7 +1718,8 @@ fun LogLineItem(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
                         // Colored Status Indicator Badge
                         Box(
@@ -1441,17 +1757,37 @@ fun LogLineItem(
                             color = ElegantTextLight,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1
                         )
                     }
 
-                    // Optional Ping / Response time
-                    if (kumaPayload.ping != null && kumaPayload.ping > 0) {
+                    val formattedTime = remember(log.timestamp) {
+                        try {
+                            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                            sdf.format(java.util.Date(log.timestamp))
+                        } catch (e: Exception) {
+                            ""
+                        }
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        if (kumaPayload.ping != null && kumaPayload.ping > 0) {
+                            Text(
+                                text = "${kumaPayload.ping} ms",
+                                color = ElegantPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
                         Text(
-                            text = "${kumaPayload.ping} ms",
-                            color = ElegantPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
+                            text = formattedTime,
+                            color = ElegantTextGray,
+                            fontSize = 9.sp,
                             fontFamily = FontFamily.Monospace
                         )
                     }
@@ -1581,6 +1917,25 @@ fun LogLineItem(
                 modifier = Modifier.width(46.dp)
             )
             
+            Spacer(modifier = Modifier.width(4.dp))
+
+            // Short generation/received time e.g. [10:15:30]
+            val shortTime = remember(log.timestamp) {
+                try {
+                    val sdf = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+                    sdf.format(java.util.Date(log.timestamp))
+                } catch (e: Exception) {
+                    ""
+                }
+            }
+            Text(
+                text = "[$shortTime]",
+                color = ElegantTextGray,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                modifier = Modifier.width(68.dp)
+            )
+
             Spacer(modifier = Modifier.width(8.dp))
 
             // Highlight-formatted actual log text
