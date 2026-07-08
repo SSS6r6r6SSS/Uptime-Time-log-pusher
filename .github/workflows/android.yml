@@ -1,5 +1,12 @@
 name: Release
 
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+
 
 # strategy:
   # 矩阵使用: ${{ matrix.os }}
