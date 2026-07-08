@@ -1,17 +1,5 @@
 name: Release
 
-# 触发条件: 这里是push以”v“开头的tag触发
-on:
-  push:
-    # 根据branch或者tags来触发
-    branches:
-      - main
-
-    tags:
-      - "v*"
-    # 忽略的标签类型，不触发构建流程(和tags不能同时写)
-    # tags-ignore:
-    #   - "d*"
 
 # strategy:
   # 矩阵使用: ${{ matrix.os }}
